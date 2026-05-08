@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "diffguard"
+version = "0.1.0"
+description = "Semantic PR review agent that argues against risky code changes."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "DiffGuard" }]
+dependencies = [
+  "click>=8.1",
+  "fastapi>=0.100",
+  "httpx>=0.24",
+  "uvicorn>=0.22",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+diffguard = "diffguard.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["diffguard*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
