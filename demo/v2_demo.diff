@@ -1,0 +1,16 @@
+diff --git a/src/auth/users.ts b/src/auth/users.ts
+--- a/src/auth/users.ts
++++ b/src/auth/users.ts
+@@
+-export function getUser(id: string): User {
+-  return repo.find(id);
+-}
++export function fetchUser(id: string): Promise<User> {
++  db.execute("select * from users where id = " + id);
++  for (const group of groups) {
++    for (const user of group.users) {
++      console.log(user.token);
++    }
++  }
++  return repo.find(id);
++}

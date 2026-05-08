@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "diffguard"
-version = "0.1.0"
-description = "Semantic PR review agent that argues against risky code changes."
+version = "2.0.0"
+description = "Production-grade semantic PR review agent with multi-language analysis."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "DiffGuard" }]

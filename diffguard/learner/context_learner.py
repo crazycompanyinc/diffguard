@@ -10,8 +10,9 @@ from pathlib import Path
 
 from diffguard.core.db import DiffGuardDB
 from diffguard.core.models import FileContext, FileRelation, ImplicitContract
+from diffguard.v2.languages import MultiLanguageAnalyzer
 
-CODE_EXTENSIONS = {".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".java", ".rb"}
+CODE_EXTENSIONS = {".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".java", ".rb", ".rs"}
 AUTH_RE = re.compile(r"\b(auth|authenticate|authorize|login_required|permission|current_user|jwt)\b", re.I)
 ROUTE_RE = re.compile(r"(@app\.route|@router\.|FastAPI\(|APIRouter\(|express\.Router|route\()", re.I)
 DB_RE = re.compile(r"\b(commit|rollback|transaction|atomic|session\.begin|BEGIN)\b", re.I)
@@ -25,6 +26,7 @@ class CodebaseContextLearner:
 
     def __init__(self, db: DiffGuardDB | None = None) -> None:
         self.db = db or DiffGuardDB()
+        self.language_analyzer = MultiLanguageAnalyzer()
 
     def learn(self, repo_path: str | Path) -> dict[str, int]:
         root = Path(repo_path).resolve()
@@ -53,10 +55,17 @@ class CodebaseContextLearner:
         return not any(part in ignored for part in path.parts)
 
     def _analyze_file(self, path: str, text: str) -> FileContext:
-        symbols = self._extract_python_symbols(text) if path.endswith(".py") else self._extract_symbols(text)
+        profile = self.language_analyzer.analyze_path(path, text)
+        symbols = {
+            "functions": [symbol.name for symbol in profile.symbols if symbol.kind == "function"],
+            "classes": [symbol.name for symbol in profile.symbols if symbol.kind == "class"],
+            "imports": list(profile.imports),
+            "routes": self._extract_symbols(text)["routes"],
+        }
         contracts = self._extract_contracts(path, text, symbols)
         patterns = self._extract_patterns(path, text, symbols)
         summary = self._summarize(path, symbols, contracts, patterns)
+        patterns.append({"name": "language_profile", "language": profile.language, "concerns": list(profile.concerns), "contracts": list(profile.contracts)})
         return FileContext(
             path=path,
             summary=summary,
@@ -127,7 +136,7 @@ class CodebaseContextLearner:
             parts.append(f"classes: {', '.join(symbols['classes'][:5])}")
         if symbols["functions"]:
             parts.append(f"functions: {', '.join(symbols['functions'][:8])}")
-        concerns = patterns[-1]
+        concerns = next((pattern for pattern in patterns if pattern.get("name") == "concerns"), {})
         active = [name for name in ("auth", "db", "tests") if concerns.get(name)]
         if active:
             parts.append(f"concerns: {', '.join(active)}")

@@ -49,3 +49,14 @@ def test_learner_detects_db_transaction_pattern(tmp_path):
 
     contract = [c for c in db.list_contracts() if c.name == "db_writes_use_transactions"][0]
     assert contract.confidence == 1.0
+
+
+def test_learner_records_rust_language_profile(tmp_path):
+    (tmp_path / "lib.rs").write_text("pub fn load_user(id: String) -> Result<User, Error> { repo.load(id) }\n", encoding="utf-8")
+    db = DiffGuardDB(tmp_path / "db.sqlite3")
+    CodebaseContextLearner(db).learn(tmp_path)
+
+    context = db.get_file("lib.rs")
+    language_profile = [pattern for pattern in context.patterns if pattern["name"] == "language_profile"][0]
+    assert language_profile["language"] == "rust"
+    assert "load_user" in context.summary

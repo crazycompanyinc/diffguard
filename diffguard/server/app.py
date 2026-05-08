@@ -14,7 +14,7 @@ from diffguard.server.webhooks import should_review_pull_request, verify_signatu
 
 
 def create_app(db_path: str | Path = ".diffguard/diffguard.sqlite3") -> FastAPI:
-    app = FastAPI(title="DiffGuard", version="0.1.0")
+    app = FastAPI(title="DiffGuard", version="2.0.0")
     db = DiffGuardDB(db_path)
     debater = PRDebater(db)
 

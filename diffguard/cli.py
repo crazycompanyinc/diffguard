@@ -14,6 +14,7 @@ from diffguard.core.db import DiffGuardDB
 from diffguard.debater.debater import PRDebater
 from diffguard.learner.context_learner import CodebaseContextLearner
 from diffguard.server.app import create_app
+from diffguard.v2.review import V2ReviewEngine
 
 
 @click.group()
@@ -59,6 +60,26 @@ def review(diff_file: Path | None, intent: str, pr: int | None, repo: str | None
             raise click.ClickException("--diff and --intent are required for local review")
         result = PRDebater(DiffGuardDB()).review_diff(diff_file.read_text(encoding="utf-8"), intent)
     print_result(result.to_dict())
+
+
+@main.command("review-v2")
+@click.option("--diff", "diff_file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--intent", default="", help="Stated PR title or description.")
+@click.option("--pr", type=int, help="GitHub PR number.")
+@click.option("--repo", help="GitHub repo as owner/name.")
+@click.option("--agent", help="Authoring agent name for agent-specific policies.")
+def review_v2(diff_file: Path | None, intent: str, pr: int | None, repo: str | None, agent: str | None) -> None:
+    """Run the full DiffGuard v2 production review."""
+    if pr is not None:
+        if not repo:
+            raise click.ClickException("--repo is required with --pr")
+        diff_text, intent = fetch_github_pr(repo, pr)
+        result = V2ReviewEngine(DiffGuardDB()).review_diff(diff_text, intent, pr_number=pr, repo=repo, agent=agent)
+    else:
+        if not diff_file or not intent:
+            raise click.ClickException("--diff and --intent are required for local review")
+        result = V2ReviewEngine(DiffGuardDB()).review_diff(diff_file.read_text(encoding="utf-8"), intent, agent=agent)
+    print_v2_result(result.to_dict())
 
 
 @main.command()
@@ -124,8 +145,35 @@ def print_result(result: dict[str, object]) -> None:
         click.echo(f"  - {suggestion}")
 
 
+def print_v2_result(result: dict[str, object]) -> None:
+    base = result["base_review"]  # type: ignore[index]
+    print_result(base)  # type: ignore[arg-type]
+    score = result["quality_score"]  # type: ignore[index]
+    click.secho(f"Quality: {score['overall']} (tests {score['test_coverage']}, conventions {score['conventions']})", fg="magenta")  # type: ignore[index]
+    for section in ("semantic_changes", "security_findings", "performance_findings", "graph_impacts", "cross_pr_impacts", "agent_findings"):
+        items = result.get(section, [])  # type: ignore[assignment]
+        if items:
+            click.secho(section.replace("_", " ").title() + ":", fg="blue")
+            for item in items[:6]:
+                click.echo(f"  - {json.dumps(item, sort_keys=True)}")
+    reviewers = result.get("reviewer_recommendations", [])  # type: ignore[assignment]
+    if reviewers:
+        click.secho("Reviewer Recommendations:", fg="blue")
+        for reviewer in reviewers:
+            click.echo(f"  - {reviewer['reviewer']} ({reviewer['confidence']}): {reviewer['reason']}")
+    fixes = result.get("auto_fixes", [])  # type: ignore[assignment]
+    if fixes:
+        click.secho("Auto-Fix Suggestions:", fg="blue")
+        for fix in fixes[:4]:
+            click.echo(f"  - {fix['title']} in {fix['path']}: {fix['snippet']}")
+
+
 def _git_diff_or_empty() -> str:
     try:
         return subprocess.check_output(["git", "diff", "--cached"], text=True)
     except (subprocess.CalledProcessError, FileNotFoundError):
         return ""
+
+
+if __name__ == "__main__":
+    main()
